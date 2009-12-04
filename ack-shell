@@ -1,0 +1,79 @@
+#!/usr/bin/python
+## iack (interactive ack)
+## thin interactive wrapper for ack (betterthangrep.com)
+## essentially adds numbers to the matched files and a prompt
+## so you can open the files by their number. 
+
+## BSD-style license. love it.
+
+import sys, subprocess, re, cmd
+EDITOR = ["emacsclient", '-n']
+AT_LINE = True
+
+
+class opener(cmd.Cmd):
+    prompt = 'ack> '
+
+    #  "open 1 200" or "open 1:200" opens file 1 at line 200
+    def getfilenum(self, line):
+        fl = re.findall('(\d+)(?:[^\d]+(\d+))?', line)
+        if not fl and not fl[0]: 
+            print "bad input"
+        filenum, linenum = fl[0]
+        if not linenum: linenum = 0
+        return int(filenum), int(linenum)
+
+    def do_EOF(self, line):
+        print "Mein leben!\n\n"
+        sys.exit(0)
+
+    def do_open(self, line):
+        filenum, linenum = self.getfilenum(line)
+        if not filenum: return
+        proc = subprocess.Popen(EDITOR + ['+%d'%linenum, files[filenum]])
+
+    def do_o(self, line):
+        self.do_open(line)
+
+    def precmd(self, line):
+        if re.match("\d+", line):
+            return "open " + line
+        return line
+
+cmdline = sys.argv
+cmdline[0] = 'ack'
+cmdline.append('--color')
+cmdline.append('--max-count')
+cmdline.append('200')
+
+process = subprocess.Popen(cmdline, shell=False, stdout=subprocess.PIPE)
+
+
+c_path = None
+cnum = 1
+files = [None]
+
+results = process.communicate()[0].split('\n')
+#rem = re.compile(r'^([^\:]+):(\d+):(.+)$') #no colors
+rem = re.compile(r'^(?:.\[[;\d]+m)([^\:]+)(?:.\[[;\d]+m):(\d+):(.+)$') # ansi-colors.
+for r in results:
+    m = rem.match(r)
+    if m:
+        fpath, lineno, line = m.groups()
+        if c_path != fpath:
+            print "\n\x1b[1;31m% 2d)\x1b[32m %s\x1b[0m" % (cnum, fpath)
+            #print "\n% 2d) %s" % (cnum, fpath) # no colors
+            c_path = fpath
+            files.append(fpath)
+            cnum +=1 
+        print "% 7s:   %s\x1b[0m" % (lineno, line.strip()[0:100])
+
+if cnum > 0:
+    try:
+        print ''
+        opener().cmdloop()
+    except:
+        raise
+        print "Mein leiben!"
+else:
+    print "No matches!"
